@@ -12,7 +12,7 @@ import sys
 
 from lexer import Lexer, TokenType
 from parser import Parser, format_ast_summary, format_ast_tree, program_to_dict
-from semantic import SemanticChecker
+from semantic import SemanticAnalyzer
 from diagnostics import Diagnostic
 
 
@@ -50,9 +50,15 @@ def analyze_source(source: str) -> dict:
     parser = Parser(tokens)
     program = parser.parse()
 
-    checker = SemanticChecker()
-    semantic_errors = checker.check(program) if not parser.errors else []
-    semantic_diagnostics = [d.to_dict() for d in checker.diagnostics] if not parser.errors else []
+    semantic_result = SemanticAnalyzer().analyze(program) if not parser.errors else None
+    semantic_errors = semantic_result.errors if semantic_result is not None else []
+    semantic_diagnostics = (
+        [d.to_dict() for d in semantic_result.diagnostics] if semantic_result is not None else []
+    )
+    function_signatures = (
+        semantic_result.function_signatures if semantic_result is not None else []
+    )
+    quads = [q.to_dict() for q in semantic_result.quads] if semantic_result is not None else []
 
     token_rows = []
     for tok in tokens:
@@ -76,6 +82,8 @@ def analyze_source(source: str) -> dict:
         "lexDiagnostics": _diagnostics_from_strings("lexical", lexer.errors),
         "parseDiagnostics": [d.to_dict() for d in parser.diagnostics],
         "semanticDiagnostics": semantic_diagnostics,
+        "functionSignatures": function_signatures,
+        "quads": quads,
         "astSummary": format_ast_summary(program),
         "astTree": format_ast_tree(program),
         "ast": program_to_dict(program),

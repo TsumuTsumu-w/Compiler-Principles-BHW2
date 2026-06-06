@@ -14,6 +14,22 @@ export interface Diagnostic {
   column: number
 }
 
+export interface FunctionSignature {
+  name: string
+  params: string[]
+  returnType: string | null
+  line: number
+  column: number
+}
+
+export interface QuadRow {
+  index: number
+  op: string
+  arg1: string
+  arg2: string
+  result: string
+}
+
 export interface AnalyzeResponse {
   ok: boolean
   tokens: TokenRow[]
@@ -23,6 +39,8 @@ export interface AnalyzeResponse {
   lexDiagnostics?: Diagnostic[]
   parseDiagnostics?: Diagnostic[]
   semanticDiagnostics?: Diagnostic[]
+  functionSignatures?: FunctionSignature[]
+  quads?: QuadRow[]
   astSummary: string
   astTree: string
   ast: Record<string, unknown>

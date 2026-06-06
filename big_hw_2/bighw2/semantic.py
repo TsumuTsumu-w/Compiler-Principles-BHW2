@@ -60,14 +60,44 @@ class VarInfo:
 
 
 @dataclass
+class FunctionSig:
+    name: str
+    params: List[TypeNode]
+    return_type: Optional[TypeNode]
+    loc: SourceLoc
+
+
+@dataclass
+class Quad:
+    index: int
+    op: str
+    arg1: str = ""
+    arg2: str = ""
+    result: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "index": self.index,
+            "op": self.op,
+            "arg1": self.arg1,
+            "arg2": self.arg2,
+            "result": self.result,
+        }
+
+
+@dataclass
 class SemanticResult:
     errors: List[str] = field(default_factory=list)
     diagnostics: List[Diagnostic] = field(default_factory=list)
+    function_signatures: List[dict] = field(default_factory=list)
+    quads: List[Quad] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
             "errors": self.errors,
             "diagnostics": [d.to_dict() for d in self.diagnostics],
+            "functionSignatures": self.function_signatures,
+            "quads": [q.to_dict() for q in self.quads],
         }
 
 
@@ -78,16 +108,25 @@ class SemanticAnalyzer:
         self.errors: List[str] = []
         self.diagnostics: List[Diagnostic] = []
         self.scopes: List[dict[str, VarInfo]] = []
+        self.functions: dict[str, FunctionSig] = {}
         self.current_return_type: Optional[TypeNode] = None
         self.loop_break_types: List[List[TypeNode]] = []
+        self.quads: List[Quad] = []
+        self.temp_index = 0
+        self.label_index = 0
+        self.loop_controls: List[dict[str, Optional[str]]] = []
 
     def analyze(self, program: Program) -> SemanticResult:
         self._reset()
+        self._collect_function_signatures(program)
         for fn in program.functions:
             self._check_function(fn)
+        self._generate_program(program)
         return SemanticResult(
             errors=list(self.errors),
             diagnostics=list(self.diagnostics),
+            function_signatures=self._function_signatures_to_dict(),
+            quads=list(self.quads),
         )
 
     def check(self, program: Program) -> List[str]:
@@ -97,8 +136,13 @@ class SemanticAnalyzer:
         self.errors = []
         self.diagnostics = []
         self.scopes = []
+        self.functions = {}
         self.current_return_type = None
         self.loop_break_types = []
+        self.quads = []
+        self.temp_index = 0
+        self.label_index = 0
+        self.loop_controls = []
 
     def _report(self, message: str, loc: Optional[SourceLoc] = None) -> None:
         diagnostic = Diagnostic.from_loc("semantic", message, loc or SourceLoc())
@@ -167,6 +211,333 @@ class SemanticAnalyzer:
             return all(self._compatible(a, b) for a, b in zip(expected.items, actual.items))
 
         return True
+
+    def _function_signatures_to_dict(self) -> List[dict]:
+        return [
+            {
+                "name": sig.name,
+                "params": [self._type_str(t) for t in sig.params],
+                "returnType": None if sig.return_type is None else self._type_str(sig.return_type),
+                "line": sig.loc.line,
+                "column": sig.loc.column,
+            }
+            for sig in self.functions.values()
+        ]
+
+    def _collect_function_signatures(self, program: Program) -> None:
+        for fn in program.functions:
+            if fn.name in self.functions:
+                self._report(f"函数 '{fn.name}' 重复定义", fn.loc)
+                continue
+            self.functions[fn.name] = FunctionSig(
+                name=fn.name,
+                params=[p.type_node for p in fn.params],
+                return_type=fn.return_type,
+                loc=fn.loc,
+            )
+
+    # ---------- quadruple generation ----------
+
+    def _new_temp(self) -> str:
+        self.temp_index += 1
+        return f"t{self.temp_index}"
+
+    def _new_label(self) -> str:
+        self.label_index += 1
+        return f"L{self.label_index}"
+
+    def _emit(self, op: str, arg1: str = "", arg2: str = "", result: str = "") -> str:
+        quad = Quad(
+            index=len(self.quads),
+            op=op,
+            arg1=str(arg1),
+            arg2=str(arg2),
+            result=str(result),
+        )
+        self.quads.append(quad)
+        return quad.result
+
+    def _generate_program(self, program: Program) -> None:
+        for fn in program.functions:
+            self._gen_function(fn)
+
+    def _gen_function(self, fn: FunctionDecl) -> None:
+        self._emit("func", "", "", fn.name)
+        for param in fn.params:
+            self._emit("param", self._type_str(param.type_node), "mut" if param.mutable else "", param.name)
+        tail_place = self._gen_expr_block(fn.body)
+        if fn.body.tail_expr is not None:
+            self._emit("return", tail_place, "", "")
+        self._emit("endfunc", "", "", fn.name)
+
+    def _gen_block(self, block: Block) -> None:
+        for stmt in block.statements:
+            self._gen_stmt(stmt)
+
+    def _gen_expr_block(self, block: ExprBlock) -> str:
+        for stmt in block.statements:
+            self._gen_stmt(stmt)
+        if block.tail_expr is not None:
+            return self._gen_expr(block.tail_expr)
+        return ""
+
+    def _gen_stmt(self, stmt: Stmt) -> None:
+        if isinstance(stmt, EmptyStmt):
+            return
+
+        if isinstance(stmt, ExprStmt):
+            self._gen_expr(stmt.expr)
+            return
+
+        if isinstance(stmt, ReturnStmt):
+            value = self._gen_expr(stmt.value) if stmt.value is not None else ""
+            self._emit("return", value, "", "")
+            return
+
+        if isinstance(stmt, LetStmt):
+            if stmt.init is not None:
+                value = self._gen_expr(stmt.init)
+                self._emit("=", value, "", stmt.name)
+            return
+
+        if isinstance(stmt, AssignStmt):
+            value = self._gen_expr(stmt.value)
+            target = self._gen_lvalue(stmt.target)
+            self._emit("=", value, "", target)
+            return
+
+        if isinstance(stmt, IfStmt):
+            self._gen_if_stmt(stmt)
+            return
+
+        if isinstance(stmt, WhileStmt):
+            self._gen_while_stmt(stmt)
+            return
+
+        if isinstance(stmt, ForStmt):
+            self._gen_for_stmt(stmt)
+            return
+
+        if isinstance(stmt, LoopStmt):
+            self._gen_loop_stmt(stmt)
+            return
+
+        if isinstance(stmt, BreakStmt):
+            value = self._gen_expr(stmt.value) if stmt.value is not None else ""
+            if self.loop_controls:
+                result_target = self.loop_controls[-1].get("result")
+                if value and result_target:
+                    self._emit("=", value, "", result_target)
+                self._emit("jmp", "", "", self.loop_controls[-1]["break"])
+            else:
+                self._emit("break", value, "", "")
+            return
+
+        if isinstance(stmt, ContinueStmt):
+            if self.loop_controls:
+                self._emit("jmp", "", "", self.loop_controls[-1]["continue"])
+            else:
+                self._emit("continue", "", "", "")
+            return
+
+    def _gen_if_stmt(self, stmt: IfStmt) -> None:
+        else_label = self._new_label()
+        end_label = self._new_label()
+        cond = self._gen_expr(stmt.condition)
+        self._emit("jz", cond, "", else_label)
+        self._gen_block(stmt.then_block)
+        if stmt.else_branch is not None:
+            self._emit("jmp", "", "", end_label)
+            self._emit("label", "", "", else_label)
+            if isinstance(stmt.else_branch, IfStmt):
+                self._gen_if_stmt(stmt.else_branch)
+            else:
+                self._gen_block(stmt.else_branch)
+            self._emit("label", "", "", end_label)
+        else:
+            self._emit("label", "", "", else_label)
+
+    def _gen_while_stmt(self, stmt: WhileStmt) -> None:
+        start_label = self._new_label()
+        end_label = self._new_label()
+        self._emit("label", "", "", start_label)
+        cond = self._gen_expr(stmt.condition)
+        self._emit("jz", cond, "", end_label)
+        self.loop_controls.append({"break": end_label, "continue": start_label, "result": None})
+        self._gen_block(stmt.body)
+        self.loop_controls.pop()
+        self._emit("jmp", "", "", start_label)
+        self._emit("label", "", "", end_label)
+
+    def _gen_for_stmt(self, stmt: ForStmt) -> None:
+        if isinstance(stmt.iterable, RangeExpr):
+            start_value = self._gen_expr(stmt.iterable.start)
+            end_value = self._gen_expr(stmt.iterable.end)
+            self._emit("=", start_value, "", stmt.var_name)
+
+            start_label = self._new_label()
+            incr_label = self._new_label()
+            end_label = self._new_label()
+            self._emit("label", "", "", start_label)
+            cond = self._new_temp()
+            self._emit("<", stmt.var_name, end_value, cond)
+            self._emit("jz", cond, "", end_label)
+            self.loop_controls.append({"break": end_label, "continue": incr_label, "result": None})
+            self._gen_block(stmt.body)
+            self.loop_controls.pop()
+            self._emit("label", "", "", incr_label)
+            step = self._new_temp()
+            self._emit("+", stmt.var_name, "1", step)
+            self._emit("=", step, "", stmt.var_name)
+            self._emit("jmp", "", "", start_label)
+            self._emit("label", "", "", end_label)
+            return
+
+        iterable = self._gen_expr(stmt.iterable)
+        index_var = self._new_temp()
+        length_expr = f"len({iterable})"
+        start_label = self._new_label()
+        incr_label = self._new_label()
+        end_label = self._new_label()
+        self._emit("=", "0", "", index_var)
+        self._emit("label", "", "", start_label)
+        cond = self._new_temp()
+        self._emit("<", index_var, length_expr, cond)
+        self._emit("jz", cond, "", end_label)
+        elem = self._new_temp()
+        self._emit("[]", iterable, index_var, elem)
+        self._emit("=", elem, "", stmt.var_name)
+        self.loop_controls.append({"break": end_label, "continue": incr_label, "result": None})
+        self._gen_block(stmt.body)
+        self.loop_controls.pop()
+        self._emit("label", "", "", incr_label)
+        step = self._new_temp()
+        self._emit("+", index_var, "1", step)
+        self._emit("=", step, "", index_var)
+        self._emit("jmp", "", "", start_label)
+        self._emit("label", "", "", end_label)
+
+    def _gen_loop_stmt(self, stmt: LoopStmt) -> None:
+        start_label = self._new_label()
+        end_label = self._new_label()
+        self._emit("label", "", "", start_label)
+        self.loop_controls.append({"break": end_label, "continue": start_label, "result": None})
+        self._gen_block(stmt.body)
+        self.loop_controls.pop()
+        self._emit("jmp", "", "", start_label)
+        self._emit("label", "", "", end_label)
+
+    def _gen_lvalue(self, expr: Expr) -> str:
+        if isinstance(expr, IdentExpr):
+            return expr.name
+        if isinstance(expr, UnaryExpr) and expr.op == "*":
+            return f"*{self._gen_expr(expr.operand)}"
+        if isinstance(expr, IndexExpr):
+            return f"{self._gen_expr(expr.base)}[{self._gen_expr(expr.index)}]"
+        if isinstance(expr, FieldExpr):
+            return f"{self._gen_expr(expr.base)}.{expr.index}"
+        return self._gen_expr(expr)
+
+    def _gen_expr(self, expr: Optional[Expr]) -> str:
+        if expr is None:
+            return ""
+
+        if isinstance(expr, NumExpr):
+            return str(expr.value)
+
+        if isinstance(expr, IdentExpr):
+            return expr.name
+
+        if isinstance(expr, UnaryExpr):
+            operand = self._gen_expr(expr.operand)
+            target = self._new_temp()
+            self._emit(expr.op, operand, "", target)
+            return target
+
+        if isinstance(expr, BinaryExpr):
+            left = self._gen_expr(expr.left)
+            right = self._gen_expr(expr.right)
+            target = self._new_temp()
+            self._emit(expr.op, left, right, target)
+            return target
+
+        if isinstance(expr, CallExpr):
+            args = [self._gen_expr(arg) for arg in expr.args]
+            for arg in args:
+                self._emit("arg", arg, "", "")
+            target = self._new_temp()
+            callee = expr.callee.name if isinstance(expr.callee, IdentExpr) else self._gen_expr(expr.callee)
+            self._emit("call", callee, str(len(args)), target)
+            return target
+
+        if isinstance(expr, ArrayExpr):
+            target = self._new_temp()
+            self._emit("array", str(len(expr.elements)), "", target)
+            for index, element in enumerate(expr.elements):
+                self._emit("array_set", target, str(index), self._gen_expr(element))
+            return target
+
+        if isinstance(expr, TupleExpr):
+            target = self._new_temp()
+            self._emit("tuple", str(len(expr.elements)), "", target)
+            for index, element in enumerate(expr.elements):
+                self._emit("tuple_set", target, str(index), self._gen_expr(element))
+            return target
+
+        if isinstance(expr, IndexExpr):
+            target = self._new_temp()
+            self._emit("[]", self._gen_expr(expr.base), self._gen_expr(expr.index), target)
+            return target
+
+        if isinstance(expr, FieldExpr):
+            target = self._new_temp()
+            self._emit(".", self._gen_expr(expr.base), str(expr.index), target)
+            return target
+
+        if isinstance(expr, BlockExpr):
+            return self._gen_expr_block(expr.block)
+
+        if isinstance(expr, IfExpr):
+            return self._gen_if_expr(expr)
+
+        if isinstance(expr, LoopExpr):
+            return self._gen_loop_expr(expr)
+
+        if isinstance(expr, RangeExpr):
+            target = self._new_temp()
+            self._emit("range", self._gen_expr(expr.start), self._gen_expr(expr.end), target)
+            return target
+
+        return ""
+
+    def _gen_if_expr(self, expr: IfExpr) -> str:
+        result = self._new_temp()
+        else_label = self._new_label()
+        end_label = self._new_label()
+        cond = self._gen_expr(expr.condition)
+        self._emit("jz", cond, "", else_label)
+        then_value = self._gen_expr_block(expr.then_block)
+        if then_value:
+            self._emit("=", then_value, "", result)
+        self._emit("jmp", "", "", end_label)
+        self._emit("label", "", "", else_label)
+        else_value = self._gen_expr_block(expr.else_block)
+        if else_value:
+            self._emit("=", else_value, "", result)
+        self._emit("label", "", "", end_label)
+        return result
+
+    def _gen_loop_expr(self, expr: LoopExpr) -> str:
+        result = self._new_temp()
+        start_label = self._new_label()
+        end_label = self._new_label()
+        self._emit("label", "", "", start_label)
+        self.loop_controls.append({"break": end_label, "continue": start_label, "result": result})
+        self._gen_block(expr.body)
+        self.loop_controls.pop()
+        self._emit("jmp", "", "", start_label)
+        self._emit("label", "", "", end_label)
+        return result
 
     # ---------- entry ----------
 
@@ -432,10 +803,35 @@ class SemanticAnalyzer:
             return UNKNOWN
 
         if isinstance(expr, CallExpr):
-            for a in expr.args:
-                self._infer_expr(a)
-            # Function signature table will be added in the next semantic pass.
-            return UNKNOWN
+            arg_types = [self._infer_expr(a) for a in expr.args]
+
+            if not isinstance(expr.callee, IdentExpr):
+                self._infer_expr(expr.callee)
+                self._report("函数调用目标必须是函数名", expr.loc)
+                return UNKNOWN
+
+            sig = self.functions.get(expr.callee.name)
+            if sig is None:
+                self._report(f"未定义函数 '{expr.callee.name}'", expr.callee.loc)
+                return UNKNOWN
+
+            if len(arg_types) != len(sig.params):
+                self._report(
+                    f"函数 '{sig.name}' 期望 {len(sig.params)} 个参数，但调用提供了 {len(arg_types)} 个参数",
+                    expr.loc,
+                )
+                return sig.return_type if sig.return_type is not None else UNKNOWN
+
+            for index, (expected, actual) in enumerate(zip(sig.params, arg_types), start=1):
+                if not self._compatible(expected, actual):
+                    arg_loc = expr.args[index - 1].loc
+                    self._report(
+                        f"函数 '{sig.name}' 第 {index} 个参数类型不匹配，"
+                        f"期望 {self._type_str(expected)}，实际为 {self._type_str(actual)}",
+                        arg_loc,
+                    )
+
+            return sig.return_type if sig.return_type is not None else UNKNOWN
 
         if isinstance(expr, ArrayExpr):
             if not expr.elements:

@@ -114,6 +114,34 @@ def _run_semantic_count(name, source, expected_error_count):
         _passed += 1
 
 
+def _run_ir_contains(name, source, expected_ops):
+    """Expect generated quadruples to contain the listed operations."""
+    global _passed, _total
+    _total += 1
+    lexer, parser, program = _parse_program(source)
+
+    ok = len(lexer.errors) == 0 and len(parser.errors) == 0
+    sem_errors = []
+    ops = []
+    if ok:
+        checker = SemanticChecker()
+        result = checker.analyze(program)
+        sem_errors = result.errors
+        ops = [quad.op for quad in result.quads]
+        ok = len(sem_errors) == 0 and all(op in ops for op in expected_ops)
+
+    print(f"[{'PASS' if ok else 'FAIL'}] {name}")
+    if not ok:
+        print("  lex errors:", lexer.errors)
+        print("  parse errors:", parser.errors)
+        print("  semantic errors:", sem_errors)
+        print("  quad ops:", ops)
+        print("  expected ops:", expected_ops)
+
+    if ok:
+        _passed += 1
+
+
 def _run_output_format(name, source):
     global _passed, _total
     _total += 1
@@ -702,6 +730,39 @@ _run_semantic("sem: if expr branch type mismatch",
 # ================================================================
 # 22. AST 输出格式
 # ================================================================
+
+_run_semantic("sem: duplicate function declaration",
+    "fn dup() {} fn dup() {}",
+    expect_error_substring="dup")
+
+_run_semantic("sem: undefined function call",
+    "fn f() { missing_fn(1); }",
+    expect_error_substring="missing_fn")
+
+_run_semantic("sem: function arg count mismatch",
+    "fn add(a:i32,b:i32) -> i32 { a+b } fn f() { let x:i32=add(1); }",
+    expect_error_substring="add")
+
+_run_semantic("sem: function arg type mismatch",
+    "fn take_i32(x:i32) {} fn f() { let a:[i32;1]=[1]; take_i32(a); }",
+    expect_error_substring="take_i32")
+
+_run_semantic("sem: function call return type ok",
+    "fn id(x:i32) -> i32 { x } fn f() { let y:i32=id(1); }")
+
+
+_run_ir_contains("ir: arithmetic assignment and return",
+    "fn f(mut a:i32) -> i32 { let mut b:i32=a+1; b=b*2; b }",
+    ["func", "+", "=", "*", "return", "endfunc"])
+
+_run_ir_contains("ir: if while and call",
+    "fn inc(x:i32) -> i32 { x+1 } fn f(mut n:i32) { while n>0 { if n==1 { n=inc(n); } n=n-1; } }",
+    ["func", ">", "jz", "==", "arg", "call", "jmp", "label", "endfunc"])
+
+_run_ir_contains("ir: for range",
+    "fn f(mut n:i32) { for mut i in 0..n { n=n+i; } }",
+    ["func", "<", "jz", "+", "jmp", "label", "endfunc"])
+
 
 _run_output_format("ast output: json and tree",
     "fn out_demo(mut a:i32) -> i32 { if a>0 { return a; } a }")
