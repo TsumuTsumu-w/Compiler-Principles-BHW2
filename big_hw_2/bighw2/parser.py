@@ -14,9 +14,11 @@ import json
 
 try:
     from lexer import Lexer, Token, TokenType
+    from diagnostics import Diagnostic, SourceLoc
 except ModuleNotFoundError:
     # Fallback for package-style execution.
-    from big_hw.bighw1.lexer import Lexer, Token, TokenType
+    from bighw2.lexer import Lexer, Token, TokenType
+    from bighw2.diagnostics import Diagnostic, SourceLoc
 
 
 # ==================== AST: Types ====================
@@ -67,17 +69,20 @@ class Expr:
 @dataclass
 class NumExpr(Expr):
     value: int
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class IdentExpr(Expr):
     name: str
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class UnaryExpr(Expr):
     op: str
     operand: Expr
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
@@ -85,39 +90,46 @@ class BinaryExpr(Expr):
     op: str
     left: Expr
     right: Expr
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class CallExpr(Expr):
     callee: Expr
     args: List[Expr]
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class ArrayExpr(Expr):
     elements: List[Expr]
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class TupleExpr(Expr):
     elements: List[Expr]
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class IndexExpr(Expr):
     base: Expr
     index: Expr
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class FieldExpr(Expr):
     base: Expr
     index: int
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class BlockExpr(Expr):
     block: "ExprBlock"
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
@@ -125,17 +137,20 @@ class IfExpr(Expr):
     condition: Expr
     then_block: "ExprBlock"
     else_block: "ExprBlock"
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class LoopExpr(Expr):
     body: "Block"
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class RangeExpr(Expr):
     start: Expr
     end: Expr
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 # ==================== AST: Statements/Blocks ====================
@@ -147,17 +162,19 @@ class Stmt:
 
 @dataclass
 class EmptyStmt(Stmt):
-    pass
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class ExprStmt(Stmt):
     expr: Expr
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class ReturnStmt(Stmt):
     value: Optional[Expr]
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
@@ -166,12 +183,14 @@ class LetStmt(Stmt):
     mutable: bool
     annotation: Optional[TypeNode]
     init: Optional[Expr]
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class AssignStmt(Stmt):
     target: Expr
     value: Expr
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
@@ -179,12 +198,14 @@ class IfStmt(Stmt):
     condition: Expr
     then_block: "Block"
     else_branch: Optional[Union["IfStmt", "Block"]]
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class WhileStmt(Stmt):
     condition: Expr
     body: "Block"
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
@@ -194,32 +215,37 @@ class ForStmt(Stmt):
     var_type: Optional[TypeNode]
     iterable: Expr
     body: "Block"
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class LoopStmt(Stmt):
     body: "Block"
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class BreakStmt(Stmt):
     value: Optional[Expr]
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class ContinueStmt(Stmt):
-    pass
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class Block:
     statements: List[Stmt] = field(default_factory=list)
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class ExprBlock:
     statements: List[Stmt] = field(default_factory=list)
     tail_expr: Optional[Expr] = None
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
@@ -227,6 +253,7 @@ class Param:
     name: str
     mutable: bool
     type_node: TypeNode
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
@@ -235,11 +262,13 @@ class FunctionDecl:
     params: List[Param]
     return_type: Optional[TypeNode]
     body: ExprBlock
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 @dataclass
 class Program:
     functions: List[FunctionDecl]
+    loc: SourceLoc = field(default_factory=SourceLoc)
 
 
 # ==================== Parser ====================
@@ -254,6 +283,7 @@ class Parser:
         self.tokens = list(tokens)
         self.index = 0
         self.errors: List[str] = []
+        self.diagnostics: List[Diagnostic] = []
 
         # Normalize stream: always end with EOF sentinel for simpler parsing.
         if not self.tokens:
@@ -296,7 +326,9 @@ class Parser:
         raise ParseError()
 
     def _raise_error(self, token: Token, message: str) -> None:
-        self.errors.append(f"Ln {token.line}:{token.column} 语法错误: {message}")
+        diagnostic = Diagnostic.from_token("syntax", message, token)
+        self.diagnostics.append(diagnostic)
+        self.errors.append(diagnostic.format())
 
     def _synchronize_top_level(self) -> None:
         while not self._at_end():
@@ -325,6 +357,7 @@ class Parser:
 
     def parse(self) -> Program:
         functions: List[FunctionDecl] = []
+        program_loc = SourceLoc.from_token(self._current())
 
         while not self._at_end() and not self._check(TokenType.HASH):
             try:
@@ -340,13 +373,14 @@ class Parser:
         if self._check(TokenType.HASH):
             self._advance()
 
-        return Program(functions)
+        return Program(functions, loc=program_loc)
 
     # ---------- declarations ----------
 
     def _parse_function_decl(self) -> FunctionDecl:
         self._consume(TokenType.KW_FN, "函数声明应以 fn 开始")
-        name = self._consume(TokenType.IDENT, "fn 后应是函数名").value
+        name_token = self._consume(TokenType.IDENT, "fn 后应是函数名")
+        name = name_token.value
 
         self._consume(TokenType.LPAREN, "函数名后缺少 '('")
         params: List[Param] = []
@@ -362,14 +396,26 @@ class Parser:
             ret_type = self._parse_type()
 
         body = self._parse_flexible_expr_block()
-        return FunctionDecl(name=name, params=params, return_type=ret_type, body=body)
+        return FunctionDecl(
+            name=name,
+            params=params,
+            return_type=ret_type,
+            body=body,
+            loc=SourceLoc.from_token(name_token),
+        )
 
     def _parse_param(self) -> Param:
         mutable = self._match(TokenType.KW_MUT)
-        name = self._consume(TokenType.IDENT, "形参缺少标识符").value
+        name_token = self._consume(TokenType.IDENT, "形参缺少标识符")
+        name = name_token.value
         self._consume(TokenType.COLON, "形参缺少 ':'")
         type_node = self._parse_type()
-        return Param(name=name, mutable=mutable, type_node=type_node)
+        return Param(
+            name=name,
+            mutable=mutable,
+            type_node=type_node,
+            loc=SourceLoc.from_token(name_token),
+        )
 
     # ---------- types ----------
 
@@ -413,7 +459,7 @@ class Parser:
     # ---------- blocks ----------
 
     def _parse_block(self) -> Block:
-        self._consume(TokenType.LBRACE, "语句块缺少 '{'")
+        lbrace = self._consume(TokenType.LBRACE, "语句块缺少 '{'")
         statements: List[Stmt] = []
 
         while not self._check(TokenType.RBRACE) and not self._at_end():
@@ -423,14 +469,14 @@ class Parser:
                 self._synchronize_to_statement()
 
         self._consume(TokenType.RBRACE, "语句块缺少 '}'")
-        return Block(statements=statements)
+        return Block(statements=statements, loc=SourceLoc.from_token(lbrace))
 
     def _parse_flexible_expr_block(self) -> ExprBlock:
         """Parse block that may end with a tail expression.
 
         Used for function expression blocks and function bodies.
         """
-        self._consume(TokenType.LBRACE, "函数体缺少 '{'")
+        lbrace = self._consume(TokenType.LBRACE, "函数体缺少 '{'")
         statements: List[Stmt] = []
         tail_expr: Optional[Expr] = None
 
@@ -458,11 +504,19 @@ class Parser:
                 if self._match(TokenType.ASSIGN):
                     value = self._parse_expression()
                     self._consume(TokenType.SEMI, "赋值语句缺少 ';'")
-                    statements.append(AssignStmt(target=expr, value=value))
+                    statements.append(
+                        AssignStmt(
+                            target=expr,
+                            value=value,
+                            loc=getattr(expr, "loc", SourceLoc()),
+                        )
+                    )
                     continue
 
                 if self._match(TokenType.SEMI):
-                    statements.append(ExprStmt(expr=expr))
+                    statements.append(
+                        ExprStmt(expr=expr, loc=getattr(expr, "loc", SourceLoc()))
+                    )
                     continue
 
                 tail_expr = expr
@@ -471,11 +525,15 @@ class Parser:
                 self._synchronize_to_statement()
 
         self._consume(TokenType.RBRACE, "函数体缺少 '}'")
-        return ExprBlock(statements=statements, tail_expr=tail_expr)
+        return ExprBlock(
+            statements=statements,
+            tail_expr=tail_expr,
+            loc=SourceLoc.from_token(lbrace),
+        )
 
     def _parse_expr_block(self) -> ExprBlock:
         """Parse expression block for rule 7.0/7.1/7.3."""
-        self._consume(TokenType.LBRACE, "表达式块缺少 '{'")
+        lbrace = self._consume(TokenType.LBRACE, "表达式块缺少 '{'")
         statements: List[Stmt] = []
         tail_expr: Optional[Expr] = None
 
@@ -502,11 +560,19 @@ class Parser:
                 if self._match(TokenType.ASSIGN):
                     value = self._parse_expression()
                     self._consume(TokenType.SEMI, "赋值语句缺少 ';'")
-                    statements.append(AssignStmt(target=expr, value=value))
+                    statements.append(
+                        AssignStmt(
+                            target=expr,
+                            value=value,
+                            loc=getattr(expr, "loc", SourceLoc()),
+                        )
+                    )
                     continue
 
                 if self._match(TokenType.SEMI):
-                    statements.append(ExprStmt(expr=expr))
+                    statements.append(
+                        ExprStmt(expr=expr, loc=getattr(expr, "loc", SourceLoc()))
+                    )
                     continue
 
                 tail_expr = expr
@@ -515,39 +581,57 @@ class Parser:
                 self._synchronize_to_statement()
 
         self._consume(TokenType.RBRACE, "表达式块缺少 '}'")
-        return ExprBlock(statements=statements, tail_expr=tail_expr)
+        return ExprBlock(
+            statements=statements,
+            tail_expr=tail_expr,
+            loc=SourceLoc.from_token(lbrace),
+        )
 
     # ---------- statements ----------
 
     def _parse_statement(self) -> Stmt:
         if self._match(TokenType.SEMI):
-            return EmptyStmt()
+            return EmptyStmt(loc=SourceLoc.from_token(self._previous()))
 
         if self._match(TokenType.KW_RETURN):
+            return_token = self._previous()
             if self._match(TokenType.SEMI):
-                return ReturnStmt(value=None)
+                return ReturnStmt(value=None, loc=SourceLoc.from_token(return_token))
             value = self._parse_expression()
             self._consume(TokenType.SEMI, "return 语句缺少 ';'")
-            return ReturnStmt(value=value)
+            return ReturnStmt(value=value, loc=SourceLoc.from_token(return_token))
 
         if self._match(TokenType.KW_LET):
-            var_mutable, name, ann = self._parse_var_decl()
+            var_mutable, name, ann, name_loc = self._parse_var_decl()
             init: Optional[Expr] = None
             if self._match(TokenType.ASSIGN):
                 init = self._parse_expression()
             self._consume(TokenType.SEMI, "let 语句缺少 ';'")
-            return LetStmt(name=name, mutable=var_mutable, annotation=ann, init=init)
+            return LetStmt(
+                name=name,
+                mutable=var_mutable,
+                annotation=ann,
+                init=init,
+                loc=name_loc,
+            )
 
         if self._match(TokenType.KW_IF):
+            if_token = self._previous()
             return self._parse_if_statement(after_if_consumed=True)
 
         if self._match(TokenType.KW_WHILE):
+            while_token = self._previous()
             cond = self._parse_expression()
             body = self._parse_block()
-            return WhileStmt(condition=cond, body=body)
+            return WhileStmt(
+                condition=cond,
+                body=body,
+                loc=SourceLoc.from_token(while_token),
+            )
 
         if self._match(TokenType.KW_FOR):
-            var_mutable, var_name, var_type = self._parse_var_decl()
+            for_token = self._previous()
+            var_mutable, var_name, var_type, var_loc = self._parse_var_decl()
             self._consume(TokenType.KW_IN, "for 语句缺少 in")
             iterable = self._parse_iterable()
             body = self._parse_block()
@@ -557,35 +641,44 @@ class Parser:
                 var_type=var_type,
                 iterable=iterable,
                 body=body,
+                loc=var_loc if var_loc.line else SourceLoc.from_token(for_token),
             )
 
         if self._match(TokenType.KW_LOOP):
+            loop_token = self._previous()
             body = self._parse_block()
-            return LoopStmt(body=body)
+            return LoopStmt(body=body, loc=SourceLoc.from_token(loop_token))
 
         if self._match(TokenType.KW_BREAK):
+            break_token = self._previous()
             if self._match(TokenType.SEMI):
-                return BreakStmt(value=None)
+                return BreakStmt(value=None, loc=SourceLoc.from_token(break_token))
             value = self._parse_expression()
             self._consume(TokenType.SEMI, "break 语句缺少 ';'")
-            return BreakStmt(value=value)
+            return BreakStmt(value=value, loc=SourceLoc.from_token(break_token))
 
         if self._match(TokenType.KW_CONTINUE):
+            continue_token = self._previous()
             self._consume(TokenType.SEMI, "continue 语句缺少 ';'")
-            return ContinueStmt()
+            return ContinueStmt(loc=SourceLoc.from_token(continue_token))
 
         expr = self._parse_expression()
         if self._match(TokenType.ASSIGN):
             value = self._parse_expression()
             self._consume(TokenType.SEMI, "赋值语句缺少 ';'")
-            return AssignStmt(target=expr, value=value)
+            return AssignStmt(
+                target=expr,
+                value=value,
+                loc=getattr(expr, "loc", SourceLoc()),
+            )
 
         self._consume(TokenType.SEMI, "表达式语句缺少 ';'")
-        return ExprStmt(expr=expr)
+        return ExprStmt(expr=expr, loc=getattr(expr, "loc", SourceLoc()))
 
     def _parse_if_statement(self, after_if_consumed: bool = False) -> IfStmt:
+        if_token = self._previous() if after_if_consumed else self._current()
         if not after_if_consumed:
-            self._consume(TokenType.KW_IF, "if 语句应以 if 开始")
+            if_token = self._consume(TokenType.KW_IF, "if 语句应以 if 开始")
 
         cond = self._parse_expression()
         then_block = self._parse_block()
@@ -597,21 +690,28 @@ class Parser:
             else:
                 else_branch = self._parse_block()
 
-        return IfStmt(condition=cond, then_block=then_block, else_branch=else_branch)
+        return IfStmt(
+            condition=cond,
+            then_block=then_block,
+            else_branch=else_branch,
+            loc=SourceLoc.from_token(if_token),
+        )
 
-    def _parse_var_decl(self) -> Tuple[bool, str, Optional[TypeNode]]:
+    def _parse_var_decl(self) -> Tuple[bool, str, Optional[TypeNode], SourceLoc]:
         var_mutable = self._match(TokenType.KW_MUT)
-        name = self._consume(TokenType.IDENT, "变量声明缺少标识符").value
+        name_token = self._consume(TokenType.IDENT, "变量声明缺少标识符")
+        name = name_token.value
         annotation: Optional[TypeNode] = None
         if self._match(TokenType.COLON):
             annotation = self._parse_type()
-        return var_mutable, name, annotation
+        return var_mutable, name, annotation, SourceLoc.from_token(name_token)
 
     def _parse_iterable(self) -> Expr:
         start = self._parse_expression()
         if self._match(TokenType.DOTDOT):
+            range_token = self._previous()
             end = self._parse_expression()
-            return RangeExpr(start=start, end=end)
+            return RangeExpr(start=start, end=end, loc=SourceLoc.from_token(range_token))
         return start
 
     # ---------- expressions ----------
@@ -629,38 +729,58 @@ class Parser:
             TokenType.EQ,
             TokenType.NEQ,
         ):
-            op = self._previous().value
+            op_token = self._previous()
+            op = op_token.value
             right = self._parse_additive()
-            expr = BinaryExpr(op=op, left=expr, right=right)
+            expr = BinaryExpr(
+                op=op,
+                left=expr,
+                right=right,
+                loc=SourceLoc.from_token(op_token),
+            )
         return expr
 
     def _parse_additive(self) -> Expr:
         expr = self._parse_multiplicative()
         while self._match(TokenType.PLUS, TokenType.MINUS):
-            op = self._previous().value
+            op_token = self._previous()
+            op = op_token.value
             right = self._parse_multiplicative()
-            expr = BinaryExpr(op=op, left=expr, right=right)
+            expr = BinaryExpr(
+                op=op,
+                left=expr,
+                right=right,
+                loc=SourceLoc.from_token(op_token),
+            )
         return expr
 
     def _parse_multiplicative(self) -> Expr:
         expr = self._parse_unary()
         while self._match(TokenType.STAR, TokenType.SLASH):
-            op = self._previous().value
+            op_token = self._previous()
+            op = op_token.value
             right = self._parse_unary()
-            expr = BinaryExpr(op=op, left=expr, right=right)
+            expr = BinaryExpr(
+                op=op,
+                left=expr,
+                right=right,
+                loc=SourceLoc.from_token(op_token),
+            )
         return expr
 
     def _parse_unary(self) -> Expr:
         if self._match(TokenType.AMP):
+            amp_token = self._previous()
             if self._match(TokenType.KW_MUT):
                 operand = self._parse_unary()
-                return UnaryExpr(op="&mut", operand=operand)
+                return UnaryExpr(op="&mut", operand=operand, loc=SourceLoc.from_token(amp_token))
             operand = self._parse_unary()
-            return UnaryExpr(op="&", operand=operand)
+            return UnaryExpr(op="&", operand=operand, loc=SourceLoc.from_token(amp_token))
 
         if self._match(TokenType.STAR):
+            star_token = self._previous()
             operand = self._parse_unary()
-            return UnaryExpr(op="*", operand=operand)
+            return UnaryExpr(op="*", operand=operand, loc=SourceLoc.from_token(star_token))
 
         return self._parse_postfix()
 
@@ -669,6 +789,7 @@ class Parser:
 
         while True:
             if self._match(TokenType.LPAREN):
+                lparen = self._previous()
                 args: List[Expr] = []
                 if not self._check(TokenType.RPAREN):
                     while True:
@@ -676,18 +797,24 @@ class Parser:
                         if not self._match(TokenType.COMMA):
                             break
                 self._consume(TokenType.RPAREN, "函数调用缺少 ')' ")
-                expr = CallExpr(callee=expr, args=args)
+                expr = CallExpr(callee=expr, args=args, loc=SourceLoc.from_token(lparen))
                 continue
 
             if self._match(TokenType.LBRACKET):
+                lbracket = self._previous()
                 idx = self._parse_expression()
                 self._consume(TokenType.RBRACKET, "下标访问缺少 ']' ")
-                expr = IndexExpr(base=expr, index=idx)
+                expr = IndexExpr(base=expr, index=idx, loc=SourceLoc.from_token(lbracket))
                 continue
 
             if self._match(TokenType.DOT):
+                dot_token = self._previous()
                 index_tok = self._consume(TokenType.NUM, "元组点访问应为 '.<NUM>'")
-                expr = FieldExpr(base=expr, index=int(index_tok.value))
+                expr = FieldExpr(
+                    base=expr,
+                    index=int(index_tok.value),
+                    loc=SourceLoc.from_token(dot_token),
+                )
                 continue
 
             break
@@ -696,28 +823,42 @@ class Parser:
 
     def _parse_primary(self) -> Expr:
         if self._match(TokenType.NUM):
-            return NumExpr(value=int(self._previous().value))
+            token = self._previous()
+            return NumExpr(value=int(token.value), loc=SourceLoc.from_token(token))
 
         if self._match(TokenType.IDENT):
-            return IdentExpr(name=self._previous().value)
+            token = self._previous()
+            return IdentExpr(name=token.value, loc=SourceLoc.from_token(token))
 
         if self._match(TokenType.KW_IF):
+            if_token = self._previous()
             cond = self._parse_expression()
             then_block = self._parse_expr_block()
             self._consume(TokenType.KW_ELSE, "if 表达式必须包含 else 分支")
             else_block = self._parse_expr_block()
-            return IfExpr(condition=cond, then_block=then_block, else_block=else_block)
+            return IfExpr(
+                condition=cond,
+                then_block=then_block,
+                else_block=else_block,
+                loc=SourceLoc.from_token(if_token),
+            )
 
         if self._match(TokenType.KW_LOOP):
+            loop_token = self._previous()
             body = self._parse_block()
-            return LoopExpr(body=body)
+            return LoopExpr(body=body, loc=SourceLoc.from_token(loop_token))
 
         if self._match(TokenType.LBRACE):
+            lbrace = self._previous()
             # put back one token and call shared parser
             self.index -= 1
-            return BlockExpr(block=self._parse_expr_block())
+            return BlockExpr(
+                block=self._parse_expr_block(),
+                loc=SourceLoc.from_token(lbrace),
+            )
 
         if self._match(TokenType.LBRACKET):
+            lbracket = self._previous()
             elements: List[Expr] = []
             if not self._check(TokenType.RBRACKET):
                 while True:
@@ -725,11 +866,12 @@ class Parser:
                     if not self._match(TokenType.COMMA):
                         break
             self._consume(TokenType.RBRACKET, "数组字面量缺少 ']' ")
-            return ArrayExpr(elements=elements)
+            return ArrayExpr(elements=elements, loc=SourceLoc.from_token(lbracket))
 
         if self._match(TokenType.LPAREN):
+            lparen = self._previous()
             if self._match(TokenType.RPAREN):
-                return TupleExpr(elements=[])
+                return TupleExpr(elements=[], loc=SourceLoc.from_token(lparen))
 
             first = self._parse_expression()
             if self._match(TokenType.COMMA):
@@ -739,7 +881,7 @@ class Parser:
                     if not self._match(TokenType.COMMA):
                         break
                 self._consume(TokenType.RPAREN, "元组表达式缺少 ')' ")
-                return TupleExpr(elements=elements)
+                return TupleExpr(elements=elements, loc=SourceLoc.from_token(lparen))
 
             self._consume(TokenType.RPAREN, "分组表达式缺少 ')' ")
             return first
@@ -760,9 +902,15 @@ class VarInfo:
 class SemanticChecker:
     def __init__(self):
         self.errors: List[str] = []
+        self.diagnostics: List[Diagnostic] = []
         self.scopes: List[Dict[str, VarInfo]] = []
         self.current_return_type: Optional[TypeNode] = None
         self.loop_break_types: List[List[TypeNode]] = []
+
+    def _report(self, message: str, loc: Optional[SourceLoc] = None) -> None:
+        diagnostic = Diagnostic.from_loc("semantic", message, loc or SourceLoc())
+        self.diagnostics.append(diagnostic)
+        self.errors.append(diagnostic.format())
 
     # ---------- scope helpers ----------
 
@@ -772,12 +920,12 @@ class SemanticChecker:
     def _pop_scope(self) -> None:
         self.scopes.pop()
 
-    def _declare(self, name: str, var: VarInfo) -> None:
+    def _declare(self, name: str, var: VarInfo, loc: Optional[SourceLoc] = None) -> None:
         if not self.scopes:
             self._push_scope()
         cur = self.scopes[-1]
         if name in cur:
-            self.errors.append(f"语义错误: 变量 '{name}' 在同一作用域重复定义")
+            self._report(f"变量 '{name}' 在同一作用域重复定义", loc)
             return
         cur[name] = var
 
@@ -837,7 +985,11 @@ class SemanticChecker:
     def _check_function(self, fn: FunctionDecl) -> None:
         self._push_scope()
         for p in fn.params:
-            self._declare(p.name, VarInfo(mutable=p.mutable, type_node=p.type_node))
+            self._declare(
+                p.name,
+                VarInfo(mutable=p.mutable, type_node=p.type_node),
+                p.loc,
+            )
 
         prev_ret = self.current_return_type
         self.current_return_type = fn.return_type
@@ -845,9 +997,10 @@ class SemanticChecker:
         body_tail_type = self._check_expr_block(fn.body)
         if fn.return_type is not None and fn.body.tail_expr is not None:
             if not self._compatible(fn.return_type, body_tail_type):
-                self.errors.append(
-                    f"语义错误: 函数 '{fn.name}' 尾表达式类型 {self._type_str(body_tail_type)} "
-                    f"与返回类型 {self._type_str(fn.return_type)} 不匹配"
+                self._report(
+                    f"函数 '{fn.name}' 尾表达式类型 {self._type_str(body_tail_type)} "
+                    f"与返回类型 {self._type_str(fn.return_type)} 不匹配",
+                    fn.body.tail_expr.loc,
                 )
 
         self.current_return_type = prev_ret
@@ -884,14 +1037,15 @@ class SemanticChecker:
         if isinstance(stmt, ReturnStmt):
             if stmt.value is None:
                 if self.current_return_type is not None:
-                    self.errors.append("语义错误: 函数声明了返回类型，但 return 缺少返回值")
+                    self._report("函数声明了返回类型，但 return 缺少返回值", stmt.loc)
                 return
 
             val_type = self._infer_expr(stmt.value)
             if self.current_return_type is not None and not self._compatible(self.current_return_type, val_type):
-                self.errors.append(
-                    f"语义错误: return 类型 {self._type_str(val_type)} 与函数返回类型 "
-                    f"{self._type_str(self.current_return_type)} 不匹配"
+                self._report(
+                    f"return 类型 {self._type_str(val_type)} 与函数返回类型 "
+                    f"{self._type_str(self.current_return_type)} 不匹配",
+                    stmt.loc,
                 )
             return
 
@@ -900,13 +1054,18 @@ class SemanticChecker:
 
             if stmt.annotation is not None and stmt.init is not None:
                 if not self._compatible(stmt.annotation, init_type):
-                    self.errors.append(
-                        f"语义错误: 变量 '{stmt.name}' 声明类型 {self._type_str(stmt.annotation)} "
-                        f"与初始化类型 {self._type_str(init_type)} 不匹配"
+                    self._report(
+                        f"变量 '{stmt.name}' 声明类型 {self._type_str(stmt.annotation)} "
+                        f"与初始化类型 {self._type_str(init_type)} 不匹配",
+                        stmt.loc,
                     )
 
             final_type = stmt.annotation if stmt.annotation is not None else init_type
-            self._declare(stmt.name, VarInfo(mutable=stmt.mutable, type_node=final_type))
+            self._declare(
+                stmt.name,
+                VarInfo(mutable=stmt.mutable, type_node=final_type),
+                stmt.loc,
+            )
             return
 
         if isinstance(stmt, AssignStmt):
@@ -914,12 +1073,13 @@ class SemanticChecker:
             rhs_type = self._infer_expr(stmt.value)
 
             if not lhs_mutable:
-                self.errors.append("语义错误: 对不可变左值进行赋值")
+                self._report("对不可变左值进行赋值", stmt.loc)
 
             if not self._compatible(lhs_type, rhs_type):
-                self.errors.append(
-                    f"语义错误: 赋值两侧类型不匹配，左侧为 {self._type_str(lhs_type)}，"
-                    f"右侧为 {self._type_str(rhs_type)}"
+                self._report(
+                    f"赋值两侧类型不匹配，左侧为 {self._type_str(lhs_type)}，"
+                    f"右侧为 {self._type_str(rhs_type)}",
+                    stmt.loc,
                 )
             return
 
@@ -951,23 +1111,26 @@ class SemanticChecker:
                 if isinstance(iterable_type, TypeArray):
                     iterable_elem_type = iterable_type.inner
                 else:
-                    self.errors.append(
-                        "语义错误: for 循环仅允许遍历区间表达式或数组表达式"
+                    self._report(
+                        "for 循环仅允许遍历区间表达式或数组表达式",
+                        stmt.iterable.loc,
                     )
 
             loop_var_type = stmt.var_type if stmt.var_type is not None else iterable_elem_type
             if stmt.var_type is not None and not isinstance(iterable_elem_type, TypeUnknown):
                 if not self._compatible(stmt.var_type, iterable_elem_type):
-                    self.errors.append(
-                        f"语义错误: for 迭代变量 '{stmt.var_name}' 类型 "
+                    self._report(
+                        f"for 迭代变量 '{stmt.var_name}' 类型 "
                         f"{self._type_str(stmt.var_type)} 与可迭代元素类型 "
-                        f"{self._type_str(iterable_elem_type)} 不匹配"
+                        f"{self._type_str(iterable_elem_type)} 不匹配",
+                        stmt.loc,
                     )
 
             self._push_scope()
             self._declare(
                 stmt.var_name,
                 VarInfo(mutable=stmt.var_mutable, type_node=loop_var_type),
+                stmt.loc,
             )
             self.loop_break_types.append([])
             for body_stmt in stmt.body.statements:
@@ -984,7 +1147,7 @@ class SemanticChecker:
 
         if isinstance(stmt, BreakStmt):
             if not self.loop_break_types:
-                self.errors.append("语义错误: break 只能出现在循环中")
+                self._report("break 只能出现在循环中", stmt.loc)
                 return
             if stmt.value is not None:
                 self.loop_break_types[-1].append(self._infer_expr(stmt.value))
@@ -992,7 +1155,7 @@ class SemanticChecker:
 
         if isinstance(stmt, ContinueStmt):
             if not self.loop_break_types:
-                self.errors.append("语义错误: continue 只能出现在循环中")
+                self._report("continue 只能出现在循环中", stmt.loc)
             return
 
     # ---------- expression/type inference ----------
@@ -1001,7 +1164,7 @@ class SemanticChecker:
         if isinstance(expr, IdentExpr):
             info = self._lookup(expr.name)
             if info is None:
-                self.errors.append(f"语义错误: 未定义变量 '{expr.name}'")
+                self._report(f"未定义变量 '{expr.name}'", expr.loc)
                 return UNKNOWN, False
             return info.type_node, info.mutable
 
@@ -1009,7 +1172,7 @@ class SemanticChecker:
             base_type = self._infer_expr(expr.operand)
             if isinstance(base_type, TypeRef):
                 return base_type.inner, base_type.mutable
-            self.errors.append("语义错误: 解引用赋值目标不是引用类型")
+            self._report("解引用赋值目标不是引用类型", expr.loc)
             return UNKNOWN, False
 
         if isinstance(expr, IndexExpr):
@@ -1018,7 +1181,7 @@ class SemanticChecker:
             if isinstance(base_type, TypeArray):
                 self._infer_expr(expr.index)
                 return base_type.inner, mutable
-            self.errors.append("语义错误: 下标赋值目标不是数组")
+            self._report("下标赋值目标不是数组", expr.loc)
             return UNKNOWN, False
 
         if isinstance(expr, FieldExpr):
@@ -1027,12 +1190,12 @@ class SemanticChecker:
             if isinstance(base_type, TypeTuple):
                 if 0 <= expr.index < len(base_type.items):
                     return base_type.items[expr.index], mutable
-                self.errors.append("语义错误: 元组点访问越界")
+                self._report("元组点访问越界", expr.loc)
                 return UNKNOWN, mutable
-            self.errors.append("语义错误: 点访问赋值目标不是元组")
+            self._report("点访问赋值目标不是元组", expr.loc)
             return UNKNOWN, mutable
 
-        self.errors.append("语义错误: 非法赋值左值")
+        self._report("非法赋值左值", getattr(expr, "loc", SourceLoc()))
         return UNKNOWN, False
 
     def _is_mutable_lvalue(self, expr: Expr) -> bool:
@@ -1062,7 +1225,7 @@ class SemanticChecker:
         if isinstance(expr, IdentExpr):
             info = self._lookup(expr.name)
             if info is None:
-                self.errors.append(f"语义错误: 使用了未定义变量 '{expr.name}'")
+                self._report(f"使用了未定义变量 '{expr.name}'", expr.loc)
                 return UNKNOWN
             return info.type_node
 
@@ -1075,7 +1238,7 @@ class SemanticChecker:
             if expr.op == "*":
                 if isinstance(operand_type, TypeRef):
                     return operand_type.inner
-                self.errors.append("语义错误: 解引用操作数不是引用")
+                self._report("解引用操作数不是引用", expr.loc)
                 return UNKNOWN
             return UNKNOWN
 
@@ -1085,12 +1248,12 @@ class SemanticChecker:
 
             if expr.op in {"+", "-", "*", "/"}:
                 if not self._compatible(left_type, I32) or not self._compatible(right_type, I32):
-                    self.errors.append("语义错误: 算术运算要求两侧为 i32")
+                    self._report("算术运算要求两侧为 i32", expr.loc)
                 return I32
 
             if expr.op in {"<", "<=", ">", ">=", "==", "!="}:
                 if not self._compatible(left_type, right_type):
-                    self.errors.append("语义错误: 比较运算两侧类型不兼容")
+                    self._report("比较运算两侧类型不兼容", expr.loc)
                 return I32
 
             return UNKNOWN
@@ -1109,7 +1272,7 @@ class SemanticChecker:
             for e in expr.elements[1:]:
                 et = self._infer_expr(e)
                 if not self._compatible(first_type, et):
-                    self.errors.append("语义错误: 数组字面量元素类型不一致")
+                    self._report("数组字面量元素类型不一致", e.loc)
             return TypeArray(inner=first_type, size=len(expr.elements))
 
         if isinstance(expr, TupleExpr):
@@ -1120,7 +1283,7 @@ class SemanticChecker:
             self._infer_expr(expr.index)
             if isinstance(base_type, TypeArray):
                 return base_type.inner
-            self.errors.append("语义错误: 仅数组支持下标访问")
+            self._report("仅数组支持下标访问", expr.loc)
             return UNKNOWN
 
         if isinstance(expr, FieldExpr):
@@ -1128,9 +1291,9 @@ class SemanticChecker:
             if isinstance(base_type, TypeTuple):
                 if 0 <= expr.index < len(base_type.items):
                     return base_type.items[expr.index]
-                self.errors.append("语义错误: 元组索引越界")
+                self._report("元组索引越界", expr.loc)
                 return UNKNOWN
-            self.errors.append("语义错误: 仅元组支持 .<NUM> 访问")
+            self._report("仅元组支持 .<NUM> 访问", expr.loc)
             return UNKNOWN
 
         if isinstance(expr, BlockExpr):
@@ -1142,7 +1305,7 @@ class SemanticChecker:
             t2 = self._check_expr_block(expr.else_block)
             if self._compatible(t1, t2):
                 return t1
-            self.errors.append("语义错误: if 表达式两个分支类型不一致")
+            self._report("if 表达式两个分支类型不一致", expr.loc)
             return UNKNOWN
 
         if isinstance(expr, LoopExpr):
@@ -1154,7 +1317,7 @@ class SemanticChecker:
             base = breaks[0]
             for t in breaks[1:]:
                 if not self._compatible(base, t):
-                    self.errors.append("语义错误: loop 表达式 break 的值类型不一致")
+                    self._report("loop 表达式 break 的值类型不一致", expr.loc)
                     return UNKNOWN
             return base
 
