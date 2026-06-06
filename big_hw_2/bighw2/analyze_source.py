@@ -50,7 +50,7 @@ def analyze_source(source: str) -> dict:
     parser = Parser(tokens)
     program = parser.parse()
 
-    semantic_result = SemanticAnalyzer().analyze(program) if not parser.errors else None
+    semantic_result = SemanticAnalyzer().analyze(program) if not lexer.errors and not parser.errors else None
     semantic_errors = semantic_result.errors if semantic_result is not None else []
     semantic_diagnostics = (
         [d.to_dict() for d in semantic_result.diagnostics] if semantic_result is not None else []

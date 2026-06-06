@@ -1,24 +1,30 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
-import type { TokenRow } from '../../types/analyzer'
+import type { QuadRow, TokenRow } from '../../types/analyzer'
 
 const props = defineProps<{
   tokens: TokenRow[]
+  quads: QuadRow[]
   astSummary: string
   astTree: string
   astJson: string
   hasResult: boolean
   hasLexErrors: boolean
   hasParseErrors: boolean
+  hasSemanticErrors: boolean
 }>()
 
-type Tab = 'lex' | 'syn'
+type Tab = 'lex' | 'syn' | 'sem'
 const activeTab = shallowRef<Tab>('lex')
 
 const showTokenTable = computed(() => props.hasResult && !props.hasLexErrors)
 const showAst = computed(() => props.hasResult && !props.hasLexErrors && !props.hasParseErrors)
+const showQuads = computed(
+  () => props.hasResult && !props.hasLexErrors && !props.hasParseErrors && !props.hasSemanticErrors,
+)
 
 const visibleTokens = computed(() => props.tokens.slice(0, 400))
+const visibleQuads = computed(() => props.quads)
 
 const viewMode = shallowRef<'summary' | 'tree' | 'json'>('summary')
 
@@ -50,6 +56,15 @@ const astContent = computed(() => {
       >
         <span class="tab-step">2</span>
         <span class="tab-label">语法分析</span>
+      </button>
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'sem' }"
+        type="button"
+        @click="activeTab = 'sem'"
+      >
+        <span class="tab-step">3</span>
+        <span class="tab-label">语义分析</span>
       </button>
     </nav>
 
@@ -131,6 +146,59 @@ const astContent = computed(() => {
         <div>
           <p class="skip-title">词法分析 — 存在错误</p>
           <p class="skip-desc">请先修复词法错误后，语法分析才能进行。</p>
+        </div>
+      </div>
+      <div v-else class="empty-hint">暂无数据，请先运行分析</div>
+    </div>
+
+    <!-- 语义分析 Tab -->
+    <div v-show="activeTab === 'sem'" class="tab-body sem-tab">
+      <template v-if="showQuads">
+        <div class="table-wrap">
+          <table class="token-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Op</th>
+                <th>Arg1</th>
+                <th>Arg2</th>
+                <th>Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in visibleQuads" :key="`quad-${item.index}-${item.op}-${item.result}`">
+                <td>{{ item.index }}</td>
+                <td>{{ item.op }}</td>
+                <td class="value-cell">{{ item.arg1 || '-' }}</td>
+                <td class="value-cell">{{ item.arg2 || '-' }}</td>
+                <td class="value-cell">{{ item.result || '-' }}</td>
+              </tr>
+              <tr v-if="visibleQuads.length === 0">
+                <td colspan="5" class="empty-row">暂无四元组中间代码</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+      <div v-else-if="hasResult && hasLexErrors" class="skipped-card skip-lex">
+        <span class="skip-step">1</span>
+        <div>
+          <p class="skip-title">词法分析 — 存在错误</p>
+          <p class="skip-desc">请先修复左侧面板中的词法错误，再重新分析。</p>
+        </div>
+      </div>
+      <div v-else-if="hasResult && hasParseErrors" class="skipped-card skip-syn">
+        <span class="skip-step">2</span>
+        <div>
+          <p class="skip-title">语法分析 — 存在错误</p>
+          <p class="skip-desc">请先修复语法错误后，语义分析才能进行。</p>
+        </div>
+      </div>
+      <div v-else-if="hasResult && hasSemanticErrors" class="skipped-card skip-sem">
+        <span class="skip-step">3</span>
+        <div>
+          <p class="skip-title">语义分析 — 存在错误</p>
+          <p class="skip-desc">请先修复左侧面板中的语义错误，再重新分析。</p>
         </div>
       </div>
       <div v-else class="empty-hint">暂无数据，请先运行分析</div>
@@ -220,6 +288,11 @@ const astContent = computed(() => {
   color: #15803d;
 }
 
+.tab-btn:nth-child(3) .tab-step {
+  background: rgba(151, 67, 13, 0.15);
+  color: #99440d;
+}
+
 .tab-label {
   letter-spacing: 0.03em;
 }
@@ -254,6 +327,11 @@ const astContent = computed(() => {
   color: #15404c;
   text-align: left;
   padding: 8px;
+}
+
+.sem-tab .token-table th {
+  background: #e6ded8;
+  color: #70401b;
 }
 
 .token-table td {
@@ -344,6 +422,11 @@ const astContent = computed(() => {
   border: 2px dashed rgba(21, 128, 61, 0.35);
 }
 
+.skip-sem {
+  background: rgba(151, 67, 13, 0.08);
+  border: 2px dashed rgba(151, 67, 13, 0.35);
+}
+
 .skip-step {
   display: inline-flex;
   align-items: center;
@@ -365,6 +448,11 @@ const astContent = computed(() => {
 .skip-syn .skip-step {
   background: rgba(21, 128, 61, 0.15);
   color: #15803d;
+}
+
+.skip-sem .skip-step {
+  background: rgba(151, 67, 13, 0.08);
+  color: #99440d;
 }
 
 .skip-title {

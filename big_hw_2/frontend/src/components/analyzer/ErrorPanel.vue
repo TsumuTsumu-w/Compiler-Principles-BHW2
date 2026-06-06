@@ -10,10 +10,6 @@ defineProps<{
 <template>
   <section class="error-panel">
     <header class="panel-header">
-      <div class="phase-badge phase-sem">
-        <span class="phase-step">3</span>
-        <span class="phase-label">语义分析 Semantic Analysis</span>
-      </div>
       <h3 class="panel-title">诊断信息</h3>
     </header>
 
