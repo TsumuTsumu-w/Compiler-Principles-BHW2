@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+# Node
+node_modules/
+.pnpm-store/
+big_hw_1/frontend/dist/
+.vite/
+
+# PyInstaller intermediate products
+big_hw_1/bighw1/build/
+big_hw_1/bighw1/*.pkg
+big_hw_1/bighw1/*.toc
+big_hw_1/bighw1/*.pyz
+big_hw_1/bighw1/warn-*.txt
+big_hw_1/bighw1/xref-*.html
+
+# Docs and reports
+docs/
+*.pdf
+*.docx
+*.pptx
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.exe

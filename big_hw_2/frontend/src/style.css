@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+Condensed:wght@400;500;700&family=Noto+Serif+SC:wght@500;700&display=swap');
+
+:root {
+  --bg-main: #f6f2e9;
+  --bg-secondary: #d8e8ef;
+  --ink-main: #10242e;
+  --ink-soft: #2b5966;
+  --border-main: rgba(13, 65, 84, 0.24);
+  --shell-shadow: 0 25px 60px rgba(11, 45, 56, 0.17);
+
+  font-family: 'IBM Plex Sans Condensed', sans-serif;
+  color: var(--ink-main);
+  background: var(--bg-main);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(4, 105, 117, 0.22), transparent 38%),
+    radial-gradient(circle at 88% 4%, rgba(14, 97, 150, 0.19), transparent 34%),
+    linear-gradient(160deg, var(--bg-main), var(--bg-secondary));
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 28px 18px 40px;
+}
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: shell-enter 700ms ease both;
+}
+
+.hero {
+  border-radius: 26px;
+  padding: 18px 22px;
+  border: 1px solid var(--border-main);
+  background:
+    linear-gradient(110deg, rgba(255, 255, 255, 0.78), rgba(243, 251, 255, 0.88)),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(5, 121, 133, 0.06),
+      rgba(5, 121, 133, 0.06) 10px,
+      transparent 10px,
+      transparent 20px
+    );
+  box-shadow: var(--shell-shadow);
+}
+
+.hero-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  color: var(--ink-soft);
+}
+
+.hero-title {
+  margin: 8px 0 6px;
+  font-family: 'Noto Serif SC', serif;
+  font-size: clamp(28px, 4.4vw, 46px);
+  line-height: 1.2;
+  color: #102733;
+}
+
+.hero-subtitle {
+  margin: 0;
+  color: #245161;
+  max-width: 760px;
+  font-size: 15px;
+}
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 12px;
+}
+
+.left-column,
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+@keyframes shell-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1080px) {
+  .layout-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  #app {
+    padding: 16px 12px 22px;
+  }
+
+  .hero {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .hero-subtitle {
+    font-size: 14px;
+  }
+}
