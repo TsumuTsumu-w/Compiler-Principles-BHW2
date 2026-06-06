@@ -12,16 +12,16 @@ ENV/
 # Node
 node_modules/
 .pnpm-store/
-big_hw_1/frontend/dist/
+big_hw_2/frontend/dist/
 .vite/
 
 # PyInstaller intermediate products
-big_hw_1/bighw1/build/
-big_hw_1/bighw1/*.pkg
-big_hw_1/bighw1/*.toc
-big_hw_1/bighw1/*.pyz
-big_hw_1/bighw1/warn-*.txt
-big_hw_1/bighw1/xref-*.html
+big_hw_2/bighw2/build/
+big_hw_2/bighw2/*.pkg
+big_hw_2/bighw2/*.toc
+big_hw_2/bighw2/*.pyz
+big_hw_2/bighw2/warn-*.txt
+big_hw_2/bighw2/xref-*.html
 
 # Docs and reports
 docs/
