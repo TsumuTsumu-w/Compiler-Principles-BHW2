@@ -4,10 +4,12 @@ import json
 
 try:
     from lexer import Lexer
-    from parser import Parser, SemanticChecker, format_ast_json, format_ast_tree
+    from parser import Parser, format_ast_json, format_ast_tree
+    from semantic import SemanticChecker
 except ModuleNotFoundError:
     from lexer import Lexer
-    from parser import Parser, SemanticChecker, format_ast_json, format_ast_tree
+    from parser import Parser, format_ast_json, format_ast_tree
+    from semantic import SemanticChecker
 
 
 _passed = 0

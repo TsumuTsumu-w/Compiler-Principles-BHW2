@@ -11,7 +11,8 @@ import re
 import sys
 
 from lexer import Lexer, TokenType
-from parser import Parser, SemanticChecker, format_ast_summary, format_ast_tree, program_to_dict
+from parser import Parser, format_ast_summary, format_ast_tree, program_to_dict
+from semantic import SemanticChecker
 from diagnostics import Diagnostic
 
 
