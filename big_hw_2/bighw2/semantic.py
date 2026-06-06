@@ -262,13 +262,13 @@ class SemanticAnalyzer:
             self._gen_function(fn)
 
     def _gen_function(self, fn: FunctionDecl) -> None:
-        self._emit("func", "", "", fn.name)
+        self._emit("func", fn.name, "", "")
         for param in fn.params:
             self._emit("param", self._type_str(param.type_node), "mut" if param.mutable else "", param.name)
         tail_place = self._gen_expr_block(fn.body)
         if fn.body.tail_expr is not None:
             self._emit("return", tail_place, "", "")
-        self._emit("endfunc", "", "", fn.name)
+        self._emit("endfunc", fn.name, "", "")
 
     def _gen_block(self, block: Block) -> None:
         for stmt in block.statements:
