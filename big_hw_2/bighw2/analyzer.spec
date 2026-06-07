@@ -5,13 +5,13 @@ import os
 from pathlib import Path
 
 SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
-PROJECT_ROOT = Path(SPEC_DIR).parent  # big_hw_1/
-BIGHW1_DIR = Path(SPEC_DIR)           # bighw1/
+PROJECT_ROOT = Path(SPEC_DIR).parent  # big_hw_2/
+BIGHW2_DIR = Path(SPEC_DIR)           # bighw2/
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 
 a = Analysis(
-    [str(BIGHW1_DIR / "server.py")],
-    pathex=[str(BIGHW1_DIR)],
+    [str(BIGHW2_DIR / "server.py")],
+    pathex=[str(BIGHW2_DIR)],
     binaries=[],
     datas=[
         (str(FRONTEND_DIST), "frontend_dist"),

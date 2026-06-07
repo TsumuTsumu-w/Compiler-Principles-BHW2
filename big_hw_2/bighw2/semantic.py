@@ -57,6 +57,7 @@ from parser import (
 class VarInfo:
     mutable: bool
     type_node: TypeNode
+    initialized: bool = True
 
 
 @dataclass
@@ -616,12 +617,34 @@ class SemanticAnalyzer:
                     )
 
             final_type = stmt.annotation if stmt.annotation is not None else init_type
-            self._declare(stmt.name, VarInfo(mutable=stmt.mutable, type_node=final_type), stmt.loc)
+            self._declare(
+                stmt.name,
+                VarInfo(mutable=stmt.mutable, type_node=final_type, initialized=stmt.init is not None),
+                stmt.loc,
+            )
             return
 
         if isinstance(stmt, AssignStmt):
-            lhs_type, lhs_mutable = self._infer_assign_target(stmt.target)
             rhs_type = self._infer_expr(stmt.value)
+
+            # 简单标识符赋值：支持 Rust 的延迟初始化（let x; x = ...; 首次赋值即初始化）。
+            if isinstance(stmt.target, IdentExpr):
+                info = self._lookup(stmt.target.name)
+                if info is None:
+                    self._report(f"未定义变量 '{stmt.target.name}'", stmt.target.loc)
+                    return
+                if info.initialized and not info.mutable:
+                    self._report("对不可变左值进行赋值", stmt.loc)
+                if not self._compatible(info.type_node, rhs_type):
+                    self._report(
+                        f"赋值两侧类型不匹配，左侧为 {self._type_str(info.type_node)}，"
+                        f"右侧为 {self._type_str(rhs_type)}",
+                        stmt.loc,
+                    )
+                info.initialized = True
+                return
+
+            lhs_type, lhs_mutable = self._infer_assign_target(stmt.target)
 
             if not lhs_mutable:
                 self._report("对不可变左值进行赋值", stmt.loc)
@@ -771,6 +794,8 @@ class SemanticAnalyzer:
             if info is None:
                 self._report(f"使用了未定义变量 '{expr.name}'", expr.loc)
                 return UNKNOWN
+            if not info.initialized:
+                self._report(f"使用了未初始化的变量 '{expr.name}'", expr.loc)
             return info.type_node
 
         if isinstance(expr, UnaryExpr):

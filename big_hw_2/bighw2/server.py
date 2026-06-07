@@ -36,7 +36,7 @@ def _get_static_dir() -> Path:
     bundled = base / "frontend_dist"
     if bundled.is_dir():
         return bundled
-    # Development: bighw1/server.py → ../frontend/dist
+    # Development: bighw2/server.py → ../frontend/dist
     dev = base.parent / "frontend" / "dist"
     if dev.is_dir():
         return dev
@@ -49,11 +49,11 @@ def _get_static_dir() -> Path:
 # Import the analyzer (same process — no subprocess overhead)
 # ---------------------------------------------------------------------------
 
-# Ensure the bighw1 package directory is on sys.path so imports work when
+# Ensure the bighw2 package directory is on sys.path so imports work when
 # running from a PyInstaller bundle where CWD may differ.
-_bighw1_dir = str(_get_base_dir())
-if _bighw1_dir not in sys.path:
-    sys.path.insert(0, _bighw1_dir)
+_bighw2_dir = str(_get_base_dir())
+if _bighw2_dir not in sys.path:
+    sys.path.insert(0, _bighw2_dir)
 
 from analyze_source import analyze_source  # noqa: E402
 
